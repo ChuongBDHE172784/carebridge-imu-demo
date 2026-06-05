@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CareBridge IMU Fall Detection Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f6f8fb;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 22px;
+      max-width: 420px;
+      margin: 20px auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    h1 { color: #1f4e79; }
+    .value { font-size: 28px; font-weight: bold; margin: 10px 0; }
+    button {
+      width: 100%;
+      padding: 15px;
+      margin-top: 12px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .primary { background: #1f7ae0; color: white; }
+    .safe { background: #22a06b; color: white; }
+    .danger { background: #e5484d; color: white; }
+    .warning {
+      display: none;
+      border: 2px solid #e5484d;
+      background: #fff1f1;
+      color: #a40000;
+    }
+    .small { font-size: 13px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>CareBridge</h1>
+    <h2>Smart Activity Monitoring Demo</h2>
+    <p class="small">
+      PoC dùng cảm biến chuyển động iPhone để phát hiện va chạm/ngã giả lập.
+    </p>
+
+    <button class="primary" onclick="enableMotion()">Enable Motion Sensor</button>
+
+    <p>Status:</p>
+    <div id="status" class="value">Not started</div>
+
+    <p>Total Acceleration:</p>
+    <div id="acc" class="value">0.00</div>
+
+    <p class="small">
+      Demo: lắc mạnh điện thoại hoặc thả nhẹ xuống nệm/gối. Không thả xuống nền cứng.
+    </p>
+  </div>
+
+  <div id="alertBox" class="card warning">
+    <h2>⚠️ Possible Fall Detected</h2>
+    <p>Bạn có vừa bị ngã hoặc va chạm mạnh không?</p>
+    <div id="countdown" class="value">30</div>
+
+    <button class="safe" onclick="markSafe()">Tôi ổn</button>
+    <button class="danger" onclick="sendSOS()">Cần trợ giúp</button>
+  </div>
+
+  <div class="card">
+    <h3>Emergency Contact</h3>
+    <p>Người thân: Bùi Đức Chương</p>
+    <p id="sosStatus">SOS chưa được gửi</p>
+  </div>
+
+  <script>
+    let fallDetected = false;
+    let timer = null;
+    let timeLeft = 30;
+
+    function enableMotion() {
+      if (typeof DeviceMotionEvent !== "undefined" &&
+          typeof DeviceMotionEvent.requestPermission === "function") {
+        DeviceMotionEvent.requestPermission()
+          .then(response => {
+            if (response === "granted") {
+              startSensor();
+            } else {
+              document.getElementById("status").innerText = "Permission denied";
+            }
+          })
+          .catch(error => {
+            document.getElementById("status").innerText = "Permission error";
+            console.error(error);
+          });
+      } else {
+        startSensor();
+      }
+    }
+
+    function startSensor() {
+      document.getElementById("status").innerText = "Monitoring...";
+      window.addEventListener("devicemotion", handleMotion);
+    }
+
+    function handleMotion(event) {
+      const acc = event.accelerationIncludingGravity;
+      if (!acc) return;
+
+      const x = acc.x || 0;
+      const y = acc.y || 0;
+      const z = acc.z || 0;
+
+      const total = Math.sqrt(x*x + y*y + z*z);
+      document.getElementById("acc").innerText = total.toFixed(2);
+
+      if (total > 22 && !fallDetected) {
+        triggerFall();
+      }
+    }
+
+    function triggerFall() {
+      fallDetected = true;
+      document.getElementById("status").innerText = "Fall event detected";
+      document.getElementById("alertBox").style.display = "block";
+
+      timeLeft = 30;
+      document.getElementById("countdown").innerText = timeLeft;
+
+      timer = setInterval(() => {
+        timeLeft--;
+        document.getElementById("countdown").innerText = timeLeft;
+
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          sendSOS();
+        }
+      }, 1000);
+    }
+
+    function markSafe() {
+      clearInterval(timer);
+      fallDetected = false;
+      document.getElementById("alertBox").style.display = "none";
+      document.getElementById("status").innerText = "User marked safe";
+    }
+
+    function sendSOS() {
+      clearInterval(timer);
+      document.getElementById("alertBox").style.display = "none";
+      document.getElementById("sosStatus").innerText =
+        "🚨 SOS SENT: Alert sent to family with current location.";
+      document.getElementById("status").innerText = "SOS sent";
+    }
+  </script>
+</body>
+</html>
