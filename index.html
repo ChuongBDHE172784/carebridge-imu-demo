@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CareBridge IMU Fall Detection Demo</title>
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -12,6 +13,7 @@
       padding: 20px;
       text-align: center;
     }
+
     .card {
       background: white;
       border-radius: 18px;
@@ -20,8 +22,22 @@
       margin: 20px auto;
       box-shadow: 0 8px 24px rgba(0,0,0,0.08);
     }
-    h1 { color: #1f4e79; }
-    .value { font-size: 28px; font-weight: bold; margin: 10px 0; }
+
+    h1 {
+      color: #1f4e79;
+      margin-bottom: 4px;
+    }
+
+    h2 {
+      margin-top: 8px;
+    }
+
+    .value {
+      font-size: 28px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+
     button {
       width: 100%;
       padding: 15px;
@@ -30,43 +46,86 @@
       border-radius: 12px;
       font-size: 16px;
       font-weight: bold;
+      cursor: pointer;
     }
-    .primary { background: #1f7ae0; color: white; }
-    .safe { background: #22a06b; color: white; }
-    .danger { background: #e5484d; color: white; }
+
+    .primary {
+      background: #1f7ae0;
+      color: white;
+    }
+
+    .secondary {
+      background: #e6eef8;
+      color: #1f4e79;
+    }
+
+    .safe {
+      background: #22a06b;
+      color: white;
+    }
+
+    .danger {
+      background: #e5484d;
+      color: white;
+    }
+
     .warning {
       display: none;
       border: 2px solid #e5484d;
       background: #fff1f1;
       color: #a40000;
     }
-    .small { font-size: 13px; color: #666; }
+
+    .small {
+      font-size: 13px;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .status-ready {
+      color: #1f4e79;
+    }
+
+    .status-monitoring {
+      color: #22a06b;
+    }
+
+    .status-danger {
+      color: #e5484d;
+    }
   </style>
 </head>
+
 <body>
   <div class="card">
     <h1>CareBridge</h1>
-    <h2>Smart Activity Monitoring Demo</h2>
+    <h2>Smart Activity Monitoring</h2>
+
     <p class="small">
-      PoC dùng cảm biến chuyển động iPhone để phát hiện va chạm/ngã giả lập.
+      Demo thật dùng cảm biến chuyển động iPhone để phát hiện va chạm/ngã giả lập.
     </p>
 
-    <button class="primary" onclick="enableMotion()">Enable Motion Sensor</button>
+    <button class="primary" onclick="enableMotion()">Start Monitoring</button>
+    <button class="secondary" onclick="stopMonitoring()">Stop Monitoring</button>
+    <button class="secondary" onclick="resetDemo()">Reset Demo</button>
 
     <p>Status:</p>
-    <div id="status" class="value">Not started</div>
+    <div id="status" class="value status-ready">Ready</div>
 
     <p>Total Acceleration:</p>
     <div id="acc" class="value">0.00</div>
 
     <p class="small">
-      Demo: lắc mạnh điện thoại hoặc thả nhẹ xuống nệm/gối. Không thả xuống nền cứng.
+      Cách demo an toàn: đặt gối/chăn/nệm dày bên dưới, bấm Start Monitoring,
+      rồi thả nhẹ iPhone từ khoảng 20-30cm xuống gối. Không thả xuống nền cứng.
     </p>
   </div>
 
   <div id="alertBox" class="card warning">
     <h2>⚠️ Possible Fall Detected</h2>
     <p>Bạn có vừa bị ngã hoặc va chạm mạnh không?</p>
+
+    <p>Countdown before SOS:</p>
     <div id="countdown" class="value">30</div>
 
     <button class="safe" onclick="markSafe()">Tôi ổn</button>
@@ -75,7 +134,7 @@
 
   <div class="card">
     <h3>Emergency Contact</h3>
-    <p>Người thân: Bùi Đức Chương</p>
+    <p>Người thân: Nguyễn Văn A</p>
     <p id="sosStatus">SOS chưa được gửi</p>
   </div>
 
@@ -83,20 +142,25 @@
     let fallDetected = false;
     let timer = null;
     let timeLeft = 30;
+    let monitoring = false;
+
+    const FALL_THRESHOLD = 22;
 
     function enableMotion() {
-      if (typeof DeviceMotionEvent !== "undefined" &&
-          typeof DeviceMotionEvent.requestPermission === "function") {
+      if (
+        typeof DeviceMotionEvent !== "undefined" &&
+        typeof DeviceMotionEvent.requestPermission === "function"
+      ) {
         DeviceMotionEvent.requestPermission()
           .then(response => {
             if (response === "granted") {
               startSensor();
             } else {
-              document.getElementById("status").innerText = "Permission denied";
+              setStatus("Permission denied", "danger");
             }
           })
           .catch(error => {
-            document.getElementById("status").innerText = "Permission error";
+            setStatus("Permission error", "danger");
             console.error(error);
           });
       } else {
@@ -105,11 +169,45 @@
     }
 
     function startSensor() {
-      document.getElementById("status").innerText = "Monitoring...";
+      monitoring = true;
+      fallDetected = false;
+
+      setStatus("Monitoring...", "monitoring");
+
+      window.removeEventListener("devicemotion", handleMotion);
       window.addEventListener("devicemotion", handleMotion);
     }
 
+    function stopMonitoring() {
+      monitoring = false;
+
+      window.removeEventListener("devicemotion", handleMotion);
+      clearInterval(timer);
+
+      setStatus("Monitoring stopped", "ready");
+    }
+
+    function resetDemo() {
+      clearInterval(timer);
+
+      fallDetected = false;
+      timeLeft = 30;
+
+      document.getElementById("alertBox").style.display = "none";
+      document.getElementById("countdown").innerText = "30";
+      document.getElementById("acc").innerText = "0.00";
+      document.getElementById("sosStatus").innerText = "SOS chưa được gửi";
+
+      if (monitoring) {
+        setStatus("Monitoring...", "monitoring");
+      } else {
+        setStatus("Ready", "ready");
+      }
+    }
+
     function handleMotion(event) {
+      if (!monitoring) return;
+
       const acc = event.accelerationIncludingGravity;
       if (!acc) return;
 
@@ -117,21 +215,29 @@
       const y = acc.y || 0;
       const z = acc.z || 0;
 
-      const total = Math.sqrt(x*x + y*y + z*z);
+      const total = Math.sqrt(x * x + y * y + z * z);
+
       document.getElementById("acc").innerText = total.toFixed(2);
 
-      if (total > 22 && !fallDetected) {
-        triggerFall();
+      if (total > FALL_THRESHOLD && !fallDetected) {
+        triggerFall(total);
       }
     }
 
-    function triggerFall() {
+    function triggerFall(totalAcceleration) {
       fallDetected = true;
-      document.getElementById("status").innerText = "Fall event detected";
+
+      setStatus(
+        "Fall event detected: " + totalAcceleration.toFixed(2),
+        "danger"
+      );
+
       document.getElementById("alertBox").style.display = "block";
 
-      timeLeft = 30;
+      timeLeft = 10;
       document.getElementById("countdown").innerText = timeLeft;
+
+      clearInterval(timer);
 
       timer = setInterval(() => {
         timeLeft--;
@@ -146,17 +252,43 @@
 
     function markSafe() {
       clearInterval(timer);
+
       fallDetected = false;
+
       document.getElementById("alertBox").style.display = "none";
-      document.getElementById("status").innerText = "User marked safe";
+
+      if (monitoring) {
+        setStatus("User marked safe. Monitoring again...", "monitoring");
+      } else {
+        setStatus("User marked safe", "ready");
+      }
     }
 
     function sendSOS() {
       clearInterval(timer);
+
       document.getElementById("alertBox").style.display = "none";
+
       document.getElementById("sosStatus").innerText =
         "🚨 SOS SENT: Alert sent to family with current location.";
-      document.getElementById("status").innerText = "SOS sent";
+
+      setStatus("SOS sent", "danger");
+    }
+
+    function setStatus(text, type) {
+      const status = document.getElementById("status");
+
+      status.innerText = text;
+
+      status.className = "value";
+
+      if (type === "monitoring") {
+        status.classList.add("status-monitoring");
+      } else if (type === "danger") {
+        status.classList.add("status-danger");
+      } else {
+        status.classList.add("status-ready");
+      }
     }
   </script>
 </body>
